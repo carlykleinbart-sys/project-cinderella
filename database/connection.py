@@ -25,8 +25,15 @@ def _build_engine():
     Build the SQLAlchemy engine with appropriate settings for the configured
     database dialect.  SQLite (used in tests) does not support connection
     pool parameters that PostgreSQL requires.
+
+    Railway (and some other hosts) provide DATABASE_URL with the legacy
+    ``postgres://`` scheme.  SQLAlchemy 2.0 requires ``postgresql://``, so
+    we normalise the scheme here.
     """
     url = settings.database_url
+    # Normalise legacy postgres:// → postgresql:// (Railway, Heroku, Render)
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
     is_sqlite = url.startswith("sqlite")
 
     kwargs: dict = {
