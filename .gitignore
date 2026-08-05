@@ -29,8 +29,11 @@ env/
 htmlcov/
 coverage.xml
 
-# Reports
-reports/
+# Generated report output files (not the Python package source)
+reports/*.html
+reports/*.md
+reports/*.json
+reports/*.csv
 
 # Playwright
 playwright/.local-browsers/
