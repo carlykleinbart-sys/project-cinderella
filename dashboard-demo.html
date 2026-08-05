@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Cinderella — Breakout Monitor (Demo)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0a0c0f;
+      --surface:   #111418;
+      --surface2:  #181c22;
+      --border:    #232830;
+      --accent:    #00d4aa;
+      --accent2:   #ff6b35;
+      --warn:      #f59e0b;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --mono:      "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      --sans:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; line-height: 1.5; min-height: 100vh; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; gap: 24px; position: sticky; top: 0; z-index: 100; }
+    .logo { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; white-space: nowrap; }
+    .logo span { color: var(--muted); font-weight: 400; }
+    .demo-badge { background: var(--warn); color: #000; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; }
+    .stat-pills { display: flex; gap: 12px; flex-wrap: wrap; }
+    .pill { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; font-family: var(--mono); font-size: 11px; display: flex; gap: 6px; align-items: center; }
+    .pill .label { color: var(--muted); }
+    .pill .value { color: var(--text); font-weight: 600; }
+    .pill .alert-val { color: var(--accent2); }
+    .refresh-btn { margin-left: auto; background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: var(--mono); transition: border-color 0.15s, color 0.15s; }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .main { display: flex; height: calc(100vh - 45px); overflow: hidden; }
+    .leaderboard-panel { width: 580px; min-width: 420px; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .detail-panel { flex: 1; overflow-y: auto; padding: 20px; }
+    .panel-header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: var(--surface); }
+    .panel-title { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+    .badge { background: var(--accent); color: var(--bg); font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+    .leaderboard-scroll { overflow-y: auto; flex: 1; }
+    .lb-row { display: grid; grid-template-columns: 28px 1fr 60px 80px; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+    .lb-row:hover { background: var(--surface2); }
+    .lb-row.selected { background: var(--surface2); border-left: 2px solid var(--accent); }
+    .lb-row.alert-row { border-left: 2px solid var(--accent2); }
+    .lb-row.alert-row.selected { border-left: 2px solid var(--accent); }
+    .lb-rank { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: right; }
+    .lb-info { overflow: hidden; }
+    .lb-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+    .lb-meta { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lb-bsr { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: right; }
+    .lb-score-col { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    .score-bar-wrap { width: 40px; height: 4px; background: var(--border); border-radius: 2px; }
+    .score-bar { height: 4px; border-radius: 2px; background: var(--accent); }
+    .score-bar.alert { background: var(--accent2); }
+    .score-num { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent); min-width: 28px; text-align: right; }
+    .score-num.alert { color: var(--accent2); }
+    .detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60%; color: var(--muted); gap: 10px; }
+    .detail-empty .icon { font-size: 40px; opacity: 0.3; }
+    .detail-empty p { font-size: 12px; font-family: var(--mono); }
+    .book-header { margin-bottom: 20px; }
+    .book-title-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+    .book-title { font-size: 20px; font-weight: 700; line-height: 1.2; flex: 1; }
+    .alert-chip { background: var(--accent2); color: #fff; font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 3px; font-family: var(--mono); white-space: nowrap; margin-top: 3px; }
+    .book-author { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+    .book-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 2px 8px; font-size: 10px; color: var(--muted); font-family: var(--mono); }
+    .chip.ku { border-color: var(--accent); color: var(--accent); }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 20px; }
+    .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+    .metric-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .metric-value { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--text); }
+    .metric-value.accent { color: var(--accent); }
+    .metric-value.warn { color: var(--warn); }
+    .metric-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+    .section-title { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .components-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 20px; }
+    .comp-row { display: flex; align-items: center; gap: 8px; }
+    .comp-name { font-size: 10px; color: var(--muted); width: 140px; flex-shrink: 0; }
+    .comp-bar-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 2px; }
+    .comp-bar { height: 3px; border-radius: 2px; background: var(--accent); }
+    .comp-val { font-family: var(--mono); font-size: 10px; color: var(--text); min-width: 28px; text-align: right; }
+    .explanation { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 4px; padding: 10px 14px; font-size: 12px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+    .explanation.alert-exp { border-left-color: var(--accent2); }
+    .social-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+    .social-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+    .chart-section { margin-bottom: 20px; }
+    canvas { width: 100% !important; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">◆ PROJECT CINDERELLA <span>/ BREAKOUT MONITOR</span></div>
+  <span class="demo-badge">DEMO DATA</span>
+  <div class="stat-pills">
+    <div class="pill"><span class="label">TRACKED</span><span class="value">1,847</span></div>
+    <div class="pill"><span class="label">SCORED TODAY</span><span class="value">1,831</span></div>
+    <div class="pill"><span class="label">ALERTS</span><span class="value alert-val">4</span></div>
+    <div class="pill"><span class="label">LAST COLLECTION</span><span class="value">2026-08-04</span></div>
+  </div>
+  <button class="refresh-btn" onclick="void 0">↺ REFRESH</button>
+</header>
+
+<div class="main">
+  <div class="leaderboard-panel">
+    <div class="panel-header">
+      <span class="panel-title">MOMENTUM LEADERBOARD</span>
+      <span class="badge" id="lb-count">15</span>
+    </div>
+    <div class="leaderboard-scroll" id="lb-scroll"></div>
+  </div>
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-empty">
+      <div class="icon">◈</div>
+      <p>Select a book from the leaderboard</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Demo data ──────────────────────────────────────────────────────────────
+const BOOKS = [
+  {
+    id: 1, asin: "B0CX1A", rank: 1,
+    title: "The Lake House Keeper", author: "Maren Cole", publisher: "Cole Creative LLC",
+    genre: "Romance", kindle_unlimited: true, alert_triggered: true,
+    momentum_score: 87.4, amazon_best_seller_rank: 312,
+    estimated_daily_sales: 1840, review_count: 2341, star_rating: 4.8,
+    goodreads_rating: 4.61, goodreads_reviews: 8920, goodreads_want_to_read: 14200,
+    goodreads_url: null, first_seen: "2026-06-03",
+    booktok_mentions: 94, booktok_total_views: 4200000,
+    reddit_posts: 38, reddit_total_upvotes: 12400,
+    explanation: "🔥 Breakout alert: rank surged from #48,200 to #312 in 14 days (+99.4% velocity). Review growth accelerating — 847 new reviews in the last 7 days. BookTok is on fire with 94 mentions and 4.2M views. Want-to-Read count spiking at 14.2K — typically a 3–4 week leading indicator before mainstream breakout.",
+    components: { rank_velocity: 98, rank_acceleration: 91, review_velocity: 84, review_acceleration: 79, rating_stability: 88, sales_growth: 92, age_factor: 71, kindle_unlimited: 100, booktok_velocity: 95, reddit_buzz: 62, goodreads_want_to_read: 87 },
+    score_history: [21,24,27,29,31,34,37,38,39,42,44,47,51,55,58,61,63,65,67,70,73,76,79,81,83,85,86,87,87,87.4]
+  },
+  {
+    id: 2, asin: "B0DK9B", rank: 2,
+    title: "Shadowed Throne", author: "J.K. Vayne", publisher: "Vayne Ink",
+    genre: "Fantasy", kindle_unlimited: true, alert_triggered: true,
+    momentum_score: 79.1, amazon_best_seller_rank: 891,
+    estimated_daily_sales: 1120, review_count: 1687, star_rating: 4.7,
+    goodreads_rating: 4.53, goodreads_reviews: 5440, goodreads_want_to_read: 9800,
+    goodreads_url: null, first_seen: "2026-05-18",
+    booktok_mentions: 51, booktok_total_views: 1900000,
+    reddit_posts: 62, reddit_total_upvotes: 18700,
+    explanation: "🔥 Alert: strong Reddit word-of-mouth across r/Fantasy and r/RomanceBooks (62 posts, 18.7K upvotes). Rank velocity at 91 — climbed from #22K to #891 in 21 days. Series potential: this is book 1 of a planned trilogy which typically amplifies breakout velocity.",
+    components: { rank_velocity: 91, rank_acceleration: 83, review_velocity: 74, review_acceleration: 69, rating_stability: 85, sales_growth: 80, age_factor: 78, kindle_unlimited: 100, booktok_velocity: 51, reddit_buzz: 94, goodreads_want_to_read: 76 },
+    score_history: [18,20,22,24,26,28,30,32,33,35,37,40,43,46,49,52,55,58,61,63,65,67,69,71,73,75,77,78,79,79.1]
+  },
+  {
+    id: 3, asin: "B0EF3C", rank: 3,
+    title: "One Last Summer", author: "Ellie Price", publisher: "Sunfield Press",
+    genre: "Romance", kindle_unlimited: false, alert_triggered: true,
+    momentum_score: 74.2, amazon_best_seller_rank: 1204,
+    estimated_daily_sales: 890, review_count: 3102, star_rating: 4.6,
+    goodreads_rating: 4.48, goodreads_reviews: 11200, goodreads_want_to_read: 6700,
+    goodreads_url: null, first_seen: "2026-04-21",
+    booktok_mentions: 73, booktok_total_views: 2800000,
+    reddit_posts: 24, reddit_total_upvotes: 6100,
+    explanation: "🔥 Alert: TikTok-driven spike — 73 BookTok mentions with 2.8M views in 7 days. The 'emotional-healing romance' angle is resonating strongly. Review count (3.1K) is unusually high for a 3-month-old indie title, suggesting a dedicated readership primed for word-of-mouth amplification.",
+    components: { rank_velocity: 82, rank_acceleration: 74, review_velocity: 90, review_acceleration: 86, rating_stability: 82, sales_growth: 74, age_factor: 60, kindle_unlimited: 0, booktok_velocity: 73, reddit_buzz: 38, goodreads_want_to_read: 65 },
+    score_history: [30,32,34,35,37,38,40,42,44,46,48,50,52,54,55,57,58,60,62,64,65,67,68,70,71,72,73,74,74,74.2]
+  },
+  {
+    id: 4, asin: "B0BW7D", rank: 4,
+    title: "Iron & Blood", author: "Sienna Cross", publisher: "Cross Worlds Publishing",
+    genre: "Dark Romance", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 68.9, amazon_best_seller_rank: 2870,
+    estimated_daily_sales: 620, review_count: 987, star_rating: 4.5,
+    goodreads_rating: 4.42, goodreads_reviews: 3210, goodreads_want_to_read: 5100,
+    goodreads_url: null, first_seen: "2026-06-29",
+    booktok_mentions: 42, booktok_total_views: 1500000,
+    reddit_posts: 31, reddit_total_upvotes: 8900,
+    explanation: "Strong upward trajectory across all channels. Dark romance is the fastest-growing KU subcategory — KU page reads contributing heavily to rank velocity. BookTok audience in r/DarkRomance is actively rec-listing this one. Watch for review acceleration: currently at 7-day velocity of +142 reviews.",
+    components: { rank_velocity: 78, rank_acceleration: 71, review_velocity: 66, review_acceleration: 60, rating_stability: 80, sales_growth: 72, age_factor: 85, kindle_unlimited: 100, booktok_velocity: 42, reddit_buzz: 57, goodreads_want_to_read: 59 },
+    score_history: [15,18,20,22,25,27,29,31,33,35,37,39,41,43,45,47,50,52,54,56,58,60,62,63,65,66,67,68,69,68.9]
+  },
+  {
+    id: 5, asin: "B0CV5E", rank: 5,
+    title: "The Paper Wives", author: "Charlotte Reed", publisher: "Reed & Rowe Books",
+    genre: "Thriller", kindle_unlimited: false, alert_triggered: false,
+    momentum_score: 63.7, amazon_best_seller_rank: 3940,
+    estimated_daily_sales: 480, review_count: 1543, star_rating: 4.4,
+    goodreads_rating: 4.31, goodreads_reviews: 4870, goodreads_want_to_read: 3800,
+    goodreads_url: null, first_seen: "2026-05-02",
+    booktok_mentions: 19, booktok_total_views: 620000,
+    reddit_posts: 44, reddit_total_upvotes: 11200,
+    explanation: "Steady climber with strong Reddit presence in r/books and r/Mystery. Rank has improved from #28K to #3.9K over 90 days — a slower but sustained trajectory that often correlates with durable breakouts rather than flash spikes. Goodreads WTR growing at 180/week.",
+    components: { rank_velocity: 71, rank_acceleration: 62, review_velocity: 70, review_acceleration: 65, rating_stability: 78, sales_growth: 64, age_factor: 55, kindle_unlimited: 0, booktok_velocity: 19, reddit_buzz: 71, goodreads_want_to_read: 52 },
+    score_history: [28,30,31,33,34,35,37,38,39,41,42,44,45,46,48,49,50,52,53,54,56,57,58,59,61,62,62,63,64,63.7]
+  },
+  {
+    id: 6, asin: "B0DA8F", rank: 6,
+    title: "Throne of Ash", author: "Maya Delacroix", publisher: "Delacroix Fiction",
+    genre: "Fantasy", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 58.3, amazon_best_seller_rank: 6200,
+    estimated_daily_sales: 340, review_count: 782, star_rating: 4.6,
+    goodreads_rating: 4.55, goodreads_reviews: 2340, goodreads_want_to_read: 4200,
+    goodreads_url: null, first_seen: "2026-07-01",
+    booktok_mentions: 28, booktok_total_views: 880000,
+    reddit_posts: 19, reddit_total_upvotes: 5600,
+    explanation: "Promising recent release with exceptional rating (4.6★). Too early to confirm breakout trajectory but early signals are positive — high rating stability, KU borrows accelerating. Only 34 days old; age factor will improve significantly if current velocity holds.",
+    components: { rank_velocity: 65, rank_acceleration: 58, review_velocity: 58, review_acceleration: 52, rating_stability: 91, sales_growth: 61, age_factor: 92, kindle_unlimited: 100, booktok_velocity: 28, reddit_buzz: 36, goodreads_want_to_read: 48 },
+    score_history: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,22,26,30,34,37,41,45,50,55,58.3]
+  },
+  {
+    id: 7, asin: "B0BL2G", rank: 7,
+    title: "Lost in the Static", author: "T.J. Marsh", publisher: "Marsh Writes",
+    genre: "Mystery", kindle_unlimited: false, alert_triggered: false,
+    momentum_score: 54.1, amazon_best_seller_rank: 8900,
+    estimated_daily_sales: 280, review_count: 2108, star_rating: 4.3,
+    goodreads_rating: 4.22, goodreads_reviews: 7610, goodreads_want_to_read: 2900,
+    goodreads_url: null, first_seen: "2026-02-14",
+    booktok_mentions: 11, booktok_total_views: 290000,
+    reddit_posts: 38, reddit_total_upvotes: 9300,
+    explanation: "Slow-burn breakout: 170 days tracked, consistent rank improvement, strong review base (2.1K). Limited social signal but Reddit organic discovery is real and growing. Review acceleration has picked up in the last 14 days (+6.2/day vs +2.1/day prior period).",
+    components: { rank_velocity: 60, rank_acceleration: 54, review_velocity: 64, review_acceleration: 58, rating_stability: 74, sales_growth: 55, age_factor: 38, kindle_unlimited: 0, booktok_velocity: 11, reddit_buzz: 60, goodreads_want_to_read: 39 },
+    score_history: [22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,42,44,46,47,49,50,51,52,53,54,54.1]
+  },
+  {
+    id: 8, asin: "B0EJ4H", rank: 8,
+    title: "Her Final Chapter", author: "Nora Blake", publisher: "Blake House Books",
+    genre: "Thriller", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 50.8, amazon_best_seller_rank: 11400,
+    estimated_daily_sales: 220, review_count: 441, star_rating: 4.5,
+    goodreads_rating: 4.39, goodreads_reviews: 1180, goodreads_want_to_read: 3300,
+    goodreads_url: null, first_seen: "2026-07-10",
+    booktok_mentions: 22, booktok_total_views: 710000,
+    reddit_posts: 12, reddit_total_upvotes: 3100,
+    explanation: "Very new (25 days) with strong early signals. 441 reviews in 25 days is above average for an indie thriller — suggests either a well-established author with an existing readership, or an ARC strategy that's working. KU page reads trending up. Monitor closely.",
+    components: { rank_velocity: 59, rank_acceleration: 52, review_velocity: 71, review_acceleration: 68, rating_stability: 82, sales_growth: 58, age_factor: 95, kindle_unlimited: 100, booktok_velocity: 22, reddit_buzz: 20, goodreads_want_to_read: 43 },
+    score_history: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,28,34,40,47,50.8]
+  },
+  {
+    id: 9, asin: "B0CF6I", rank: 9,
+    title: "The Gilded Cage", author: "Isabelle Fox", publisher: "Fox & Feather Press",
+    genre: "Dark Romance", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 46.2, amazon_best_seller_rank: 15600,
+    estimated_daily_sales: 170, review_count: 1234, star_rating: 4.4,
+    goodreads_rating: 4.35, goodreads_reviews: 3890, goodreads_want_to_read: 2100,
+    goodreads_url: null, first_seen: "2026-04-08",
+    booktok_mentions: 16, booktok_total_views: 490000,
+    reddit_posts: 21, reddit_total_upvotes: 5400,
+    explanation: "Mid-tier performer with stable trajectory. Rank has plateaued around #15K–18K for the past 3 weeks — may need a promotional push or social catalyst to break through. Strong foundation with 1.2K reviews and solid rating. Goodreads WTR has been flat, which explains the plateaued rank.",
+    components: { rank_velocity: 51, rank_acceleration: 43, review_velocity: 55, review_acceleration: 48, rating_stability: 77, sales_growth: 46, age_factor: 47, kindle_unlimited: 100, booktok_velocity: 16, reddit_buzz: 34, goodreads_want_to_read: 31 },
+    score_history: [32,33,34,35,36,37,38,39,40,41,42,43,44,44,45,45,46,46,46,47,47,47,46,46,46,46,46,46,46,46.2]
+  },
+  {
+    id: 10, asin: "B0AK8J", rank: 10,
+    title: "Starfall Academy", author: "Jade Rivers", publisher: "Rivers Publishing Co",
+    genre: "YA Fantasy", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 42.7, amazon_best_seller_rank: 19800,
+    estimated_daily_sales: 140, review_count: 889, star_rating: 4.7,
+    goodreads_rating: 4.61, goodreads_reviews: 2780, goodreads_want_to_read: 5800,
+    goodreads_url: null, first_seen: "2026-03-15",
+    booktok_mentions: 31, booktok_total_views: 1100000,
+    reddit_posts: 14, reddit_total_upvotes: 2900,
+    explanation: "Underperforming given its social metrics — 5.8K Goodreads WTR and 31 BookTok mentions are strong signals for a YA title, but Amazon rank hasn't caught up yet. This lag pattern often resolves in a sudden rank jump. High rating (4.7★) with growing review velocity suggests imminent momentum shift.",
+    components: { rank_velocity: 46, rank_acceleration: 39, review_velocity: 51, review_acceleration: 46, rating_stability: 93, sales_growth: 41, age_factor: 42, kindle_unlimited: 100, booktok_velocity: 31, reddit_buzz: 18, goodreads_want_to_read: 62 },
+    score_history: [20,21,22,23,24,25,26,27,27,28,29,30,31,31,32,33,33,34,35,35,36,37,38,39,40,41,41,42,43,42.7]
+  },
+  {
+    id: 11, asin: "B0DM1K", rank: 11,
+    title: "Sweet Chaos", author: "Lily Chambers", publisher: "Chambers & Lily LLC",
+    genre: "Romance", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 39.4, amazon_best_seller_rank: 24200,
+    estimated_daily_sales: 110, review_count: 567, star_rating: 4.5,
+    goodreads_rating: 4.41, goodreads_reviews: 1760, goodreads_want_to_read: 1600,
+    goodreads_url: null, first_seen: "2026-06-12",
+    booktok_mentions: 14, booktok_total_views: 380000,
+    reddit_posts: 9, reddit_total_upvotes: 2300,
+    explanation: "Consistent early-stage growth pattern. 53 days in with steady rank improvement. Low social signal but review velocity is above-average for the age cohort. Worth monitoring — the trajectory mirrors early-stage patterns of several breakouts in this dataset.",
+    components: { rank_velocity: 44, rank_acceleration: 38, review_velocity: 48, review_acceleration: 43, rating_stability: 80, sales_growth: 40, age_factor: 82, kindle_unlimited: 100, booktok_velocity: 14, reddit_buzz: 14, goodreads_want_to_read: 22 },
+    score_history: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,18,20,22,24,26,28,29,31,33,35,36,38,39.4]
+  },
+  {
+    id: 12, asin: "B0BG4L", rank: 12,
+    title: "Hollow Bones", author: "Rae Winters", publisher: "Winters Dark LLC",
+    genre: "Thriller", kindle_unlimited: false, alert_triggered: false,
+    momentum_score: 36.1, amazon_best_seller_rank: 29700,
+    estimated_daily_sales: 88, review_count: 423, star_rating: 4.3,
+    goodreads_rating: 4.20, goodreads_reviews: 1290, goodreads_want_to_read: 980,
+    goodreads_url: null, first_seen: "2026-05-25",
+    booktok_mentions: 7, booktok_total_views: 140000,
+    reddit_posts: 17, reddit_total_upvotes: 4100,
+    explanation: "Stable trajectory with Reddit as the primary discovery channel. No KU and limited BookTok presence constrains the ceiling relative to comparables. Rank improving gradually — currently at #29.7K from #62K at discovery 71 days ago. Solid but not yet breakout-pace.",
+    components: { rank_velocity: 40, rank_acceleration: 35, review_velocity: 44, review_acceleration: 39, rating_stability: 71, sales_growth: 37, age_factor: 65, kindle_unlimited: 0, booktok_velocity: 7, reddit_buzz: 26, goodreads_want_to_read: 14 },
+    score_history: [18,19,20,21,22,23,24,25,26,27,28,28,29,30,30,31,32,32,33,33,34,34,35,35,35,36,36,36,36,36.1]
+  },
+  {
+    id: 13, asin: "B0CE9M", rank: 13,
+    title: "The Raven's Bargain", author: "Victor Ash", publisher: "Ashwood Reads",
+    genre: "Fantasy", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 32.8, amazon_best_seller_rank: 36500,
+    estimated_daily_sales: 67, review_count: 312, star_rating: 4.6,
+    goodreads_rating: 4.51, goodreads_reviews: 890, goodreads_want_to_read: 2200,
+    goodreads_url: null, first_seen: "2026-06-19",
+    booktok_mentions: 9, booktok_total_views: 210000,
+    reddit_posts: 8, reddit_total_upvotes: 1900,
+    explanation: "Promising fundamentals — 4.6★ rating and 2.2K Goodreads WTR are solid for a 46-day-old title. Review count (312) is low relative to WTR, suggesting readers are acquiring but not yet reviewing at volume. Expect review velocity to accelerate in the next 2–4 weeks if readers are finishing.",
+    components: { rank_velocity: 37, rank_acceleration: 31, review_velocity: 38, review_acceleration: 34, rating_stability: 89, sales_growth: 33, age_factor: 84, kindle_unlimited: 100, booktok_velocity: 9, reddit_buzz: 12, goodreads_want_to_read: 30 },
+    score_history: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,14,18,22,26,30,32.8]
+  },
+  {
+    id: 14, asin: "B0BN3N", rank: 14,
+    title: "Sins of Silver", author: "Derek Stone", publisher: "Stone Cold Publishing",
+    genre: "Mystery", kindle_unlimited: false, alert_triggered: false,
+    momentum_score: 29.3, amazon_best_seller_rank: 44100,
+    estimated_daily_sales: 52, review_count: 198, star_rating: 4.4,
+    goodreads_rating: 4.28, goodreads_reviews: 620, goodreads_want_to_read: 740,
+    goodreads_url: null, first_seen: "2026-07-14",
+    booktok_mentions: 4, booktok_total_views: 72000,
+    reddit_posts: 6, reddit_total_upvotes: 1400,
+    explanation: "Early-stage tracker — 21 days in, limited data for confident scoring. Initial signals are neutral: rank at #44K is expected for a new release with no apparent promotional push. No KU and limited social presence. Will need more data points to assess trajectory.",
+    components: { rank_velocity: 33, rank_acceleration: 27, review_velocity: 35, review_acceleration: 30, rating_stability: 76, sales_growth: 29, age_factor: 96, kindle_unlimited: 0, booktok_velocity: 4, reddit_buzz: 9, goodreads_want_to_read: 10 },
+    score_history: [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,25,29.3]
+  },
+  {
+    id: 15, asin: "B0AJ7O", rank: 15,
+    title: "Midnight in Monterey", author: "Sophie Crane", publisher: "Crane Bay Books",
+    genre: "Romance", kindle_unlimited: true, alert_triggered: false,
+    momentum_score: 25.6, amazon_best_seller_rank: 58300,
+    estimated_daily_sales: 38, review_count: 3840, star_rating: 4.2,
+    goodreads_rating: 4.18, goodreads_reviews: 12800, goodreads_want_to_read: 890,
+    goodreads_url: null, first_seen: "2025-11-01",
+    booktok_mentions: 3, booktok_total_views: 41000,
+    reddit_posts: 5, reddit_total_upvotes: 1100,
+    explanation: "Legacy tracked title (277 days). High review count (3.8K) reflects a long tail readership but rank has stabilized at #58K — the classic 'long-tail' pattern. No current momentum signals. Keeping in monitor for any sudden reactivation, e.g. if included in a Bookstagram feature or sequel announcement.",
+    components: { rank_velocity: 28, rank_acceleration: 21, review_velocity: 30, review_acceleration: 24, rating_stability: 66, sales_growth: 24, age_factor: 14, kindle_unlimited: 100, booktok_velocity: 3, reddit_buzz: 7, goodreads_want_to_read: 12 },
+    score_history: [38,37,36,35,34,33,32,31,30,30,29,29,28,28,27,27,27,26,26,26,26,26,25,25,25,25,26,26,25,25.6]
+  }
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+function fmtScore(s) { return s != null ? s.toFixed(1) : '—'; }
+
+// ── Render leaderboard ─────────────────────────────────────────────────────
+function renderLeaderboard() {
+  const container = document.getElementById('lb-scroll');
+  container.innerHTML = BOOKS.map(b => {
+    const isAlert = b.alert_triggered;
+    const barW = Math.round(b.momentum_score);
+    const bsr = b.amazon_best_seller_rank ? '#' + fmt(b.amazon_best_seller_rank) : '—';
+    return `<div class="lb-row ${isAlert ? 'alert-row' : ''}" data-id="${b.id}" onclick="selectBook(${b.id})">
+      <div class="lb-rank">${b.rank}</div>
+      <div class="lb-info">
+        <div class="lb-title">${b.title}</div>
+        <div class="lb-meta">${b.author} · ${b.genre}</div>
+      </div>
+      <div class="lb-bsr">${bsr}</div>
+      <div class="lb-score-col">
+        <div class="score-bar-wrap"><div class="score-bar ${isAlert ? 'alert' : ''}" style="width:${barW}%"></div></div>
+        <div class="score-num ${isAlert ? 'alert' : ''}">${fmtScore(b.momentum_score)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Select book ────────────────────────────────────────────────────────────
+function selectBook(id) {
+  document.querySelectorAll('.lb-row').forEach(r => r.classList.remove('selected'));
+  const row = document.querySelector(`[data-id="${id}"]`);
+  if (row) row.classList.add('selected');
+  const book = BOOKS.find(b => b.id === id);
+  if (book) renderDetail(book);
+}
+
+// ── Render detail ──────────────────────────────────────────────────────────
+const COMP_NAMES = {
+  rank_velocity: 'Rank Velocity',
+  rank_acceleration: 'Rank Accel.',
+  review_velocity: 'Review Velocity',
+  review_acceleration: 'Review Accel.',
+  rating_stability: 'Rating Stability',
+  sales_growth: 'Sales Growth',
+  age_factor: 'Age Factor',
+  kindle_unlimited: 'Kindle Unlimited',
+  booktok_velocity: 'BookTok',
+  reddit_buzz: 'Reddit Buzz',
+  goodreads_want_to_read: 'GR Want-to-Read',
+};
+
+function renderDetail(b) {
+  const panel = document.getElementById('detail-panel');
+  const isAlert = b.alert_triggered;
+
+  const compHtml = Object.entries(COMP_NAMES).map(([k, label]) => {
+    const v = b.components[k] ?? 0;
+    return `<div class="comp-row">
+      <div class="comp-name">${label}</div>
+      <div class="comp-bar-wrap"><div class="comp-bar" style="width:${v}%"></div></div>
+      <div class="comp-val">${v.toFixed(0)}</div>
+    </div>`;
+  }).join('');
+
+  const kuChip = b.kindle_unlimited ? '<span class="chip ku">KU</span>' : '';
+  const alertChip = isAlert ? '<span class="alert-chip">🔥 ALERT</span>' : '';
+  const points = b.score_history.filter(v => v != null);
+  const wtrClass = (b.goodreads_want_to_read || 0) > 1000 ? 'warn' : 'accent';
+
+  panel.innerHTML = `
+    <div class="book-header">
+      <div class="book-title-row">
+        <div class="book-title">${b.title}</div>
+        ${alertChip}
+      </div>
+      <div class="book-author">${b.author} · ${b.publisher}</div>
+      <div class="book-meta-chips">
+        ${kuChip}
+        <span class="chip">${b.genre}</span>
+        <span class="chip">ASIN: ${b.asin}</span>
+        <span class="chip">First seen ${b.first_seen}</span>
+        <a href="https://amazon.com/dp/${b.asin}" target="_blank" class="chip">Amazon ↗</a>
+      </div>
+    </div>
+
+    <div class="section-title">Latest Metrics</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Momentum Score</div>
+        <div class="metric-value accent">${fmtScore(b.momentum_score)}</div>
+        <div class="metric-sub">out of 100</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Amazon BSR</div>
+        <div class="metric-value">#${b.amazon_best_seller_rank.toLocaleString()}</div>
+        <div class="metric-sub">best seller rank</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Est. Daily Sales</div>
+        <div class="metric-value">${fmt(b.estimated_daily_sales)}</div>
+        <div class="metric-sub">copies/day</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Reviews</div>
+        <div class="metric-value">${fmt(b.review_count)}</div>
+        <div class="metric-sub">${b.star_rating.toFixed(1)}★ Amazon</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">GR Rating</div>
+        <div class="metric-value">${b.goodreads_rating.toFixed(2)}★</div>
+        <div class="metric-sub">${fmt(b.goodreads_reviews)} ratings</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Want-to-Read</div>
+        <div class="metric-value ${wtrClass}">${fmt(b.goodreads_want_to_read)}</div>
+        <div class="metric-sub">Goodreads shelf</div>
+      </div>
+    </div>
+
+    <div class="explanation ${isAlert ? 'alert-exp' : ''}">${b.explanation}</div>
+
+    <div class="section-title">30-Day Score Trend</div>
+    <div class="chart-section">
+      <canvas id="spark-canvas" height="80"></canvas>
+    </div>
+
+    <div class="section-title">Score Components</div>
+    <div class="components-grid">${compHtml}</div>
+
+    <div class="section-title">Social Signals (7d)</div>
+    <div class="social-grid">
+      <div class="social-card">
+        <div class="metric-label">TikTok Mentions</div>
+        <div class="metric-value accent">${b.booktok_mentions}</div>
+        <div class="metric-sub">${fmt(b.booktok_total_views)} total views</div>
+      </div>
+      <div class="social-card">
+        <div class="metric-label">Reddit Posts</div>
+        <div class="metric-value accent">${b.reddit_posts}</div>
+        <div class="metric-sub">${fmt(b.reddit_total_upvotes)} upvotes</div>
+      </div>
+      <div class="social-card">
+        <div class="metric-label">GR Want-to-Read</div>
+        <div class="metric-value ${wtrClass}">${fmt(b.goodreads_want_to_read)}</div>
+        <div class="metric-sub">leading indicator</div>
+      </div>
+    </div>
+  `;
+
+  drawSparkline('spark-canvas', b.score_history, isAlert);
+}
+
+// ── Canvas sparkline ───────────────────────────────────────────────────────
+function drawSparkline(canvasId, allPoints, isAlert) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  // Filter nulls but keep position info for x-axis
+  const points = allPoints.slice(-30);
+  const validPoints = points.map((v, i) => v != null ? { i, v } : null).filter(Boolean);
+  if (validPoints.length < 2) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth || 600;
+  const h = 80;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = { top: 8, right: 12, bottom: 20, left: 36 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+  const vals = validPoints.map(p => p.v);
+  const min = Math.max(0, Math.min(...vals) - 5);
+  const max = Math.min(100, Math.max(...vals) + 5);
+  const range = max - min || 1;
+  const n = points.length - 1;
+
+  const xs = i => pad.left + (i / n) * cw;
+  const ys = v => pad.top + ch - ((v - min) / range) * ch;
+
+  // Y labels
+  ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
+  [min, (min + max) / 2, max].forEach(v => ctx.fillText(v.toFixed(0), pad.left - 4, ys(v) + 3));
+
+  // Grid lines
+  ctx.strokeStyle = '#232830'; ctx.lineWidth = 1;
+  [min, (min + max) / 2, max].forEach(v => {
+    ctx.beginPath(); ctx.moveTo(pad.left, ys(v)); ctx.lineTo(pad.left + cw, ys(v)); ctx.stroke();
+  });
+
+  // X labels
+  ctx.fillStyle = '#64748b'; ctx.textAlign = 'center'; ctx.font = '9px monospace';
+  ctx.fillText('30d ago', xs(0), h - 4);
+  ctx.fillText('today', xs(n), h - 4);
+
+  const color = isAlert ? '#ff6b35' : '#00d4aa';
+
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(xs(validPoints[0].i), ys(validPoints[0].v));
+  validPoints.forEach(p => ctx.lineTo(xs(p.i), ys(p.v)));
+  ctx.lineTo(xs(validPoints[validPoints.length - 1].i), h - pad.bottom);
+  ctx.lineTo(xs(validPoints[0].i), h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = isAlert ? 'rgba(255,107,53,0.08)' : 'rgba(0,212,170,0.08)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(xs(validPoints[0].i), ys(validPoints[0].v));
+  validPoints.forEach(p => ctx.lineTo(xs(p.i), ys(p.v)));
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Dots
+  validPoints.forEach(p => {
+    ctx.beginPath(); ctx.arc(xs(p.i), ys(p.v), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+renderLeaderboard();
+// Auto-select first book
+setTimeout(() => selectBook(1), 50);
+</script>
+</body>
+</html>

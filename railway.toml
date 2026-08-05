@@ -1,0 +1,21 @@
+# Railway deployment configuration
+# https://docs.railway.app/reference/config-as-code
+#
+# This project deploys as TWO Railway services from the same repo:
+#
+#   dashboard  — FastAPI web app  (this file / start command set in Railway UI)
+#   scheduler  — APScheduler daemon collecting data daily
+#
+# See DEPLOY.md for full setup instructions.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Used by the dashboard service — Railway injects PORT automatically
+startCommand = "python -m scripts.serve"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

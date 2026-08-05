@@ -1,0 +1,86 @@
+version: "3.9"
+
+# ── Project Cinderella — local development stack ──────────────────────────────
+#
+# Services:
+#   db          — PostgreSQL 16
+#   cinderella  — scheduler daemon (collector + reporter)
+#   dashboard   — FastAPI web dashboard  →  http://localhost:8000
+#
+# Quick start:
+#   cp .env.example .env
+#   docker compose up -d db
+#   docker compose run --rm cinderella alembic upgrade head
+#   docker compose run --rm cinderella python -m scripts.seed_publishers
+#   docker compose up -d dashboard         # start the web UI
+#   docker compose run --rm cinderella python -m scripts.collect
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cinderella
+      POSTGRES_PASSWORD: cinderella
+      POSTGRES_DB: cinderella
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinderella"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Application ─────────────────────────────────────────────────────────────
+  cinderella:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cinderella:cinderella@db:5432/cinderella
+      AMAZON_HEADLESS: "true"
+      AMAZON_REQUEST_DELAY_MIN: "2.0"
+      AMAZON_REQUEST_DELAY_MAX: "5.0"
+      AMAZON_MAX_BOOKS_PER_CATEGORY: "100"
+      LOG_LEVEL: "INFO"
+    env_file:
+      - .env
+    volumes:
+      - ./reports:/app/reports
+    # Override at runtime:
+    #   docker compose run --rm cinderella python -m scripts.collect --dry-run
+    command: ["python", "-m", "scripts.scheduler"]
+
+  # ── Web dashboard ───────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://cinderella:cinderella@db:5432/cinderella
+      LOG_LEVEL: "INFO"
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    command: ["python", "-m", "scripts.serve", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Cinderella — Breakout Monitor</title>
+  <style>
+    /* ── Reset & Variables ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0a0c0f;
+      --surface:   #111418;
+      --surface2:  #181c22;
+      --border:    #232830;
+      --accent:    #00d4aa;
+      --accent2:   #ff6b35;
+      --warn:      #f59e0b;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --mono:      "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      --sans:      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header bar ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    .logo span { color: var(--muted); font-weight: 400; }
+    .stat-pills { display: flex; gap: 12px; flex-wrap: wrap; }
+    .pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .pill .label { color: var(--muted); }
+    .pill .value { color: var(--text); font-weight: 600; }
+    .pill .alert-val { color: var(--accent2); }
+    .refresh-btn {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: var(--mono);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Layout ── */
+    .main { display: flex; height: calc(100vh - 45px); overflow: hidden; }
+    .leaderboard-panel {
+      width: 580px;
+      min-width: 420px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .detail-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    /* ── Panel header ── */
+    .panel-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+    }
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .badge {
+      background: var(--accent);
+      color: var(--bg);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--mono);
+    }
+
+    /* ── Leaderboard table ── */
+    .leaderboard-scroll { overflow-y: auto; flex: 1; }
+    .lb-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 60px 80px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .lb-row:hover { background: var(--surface2); }
+    .lb-row.selected { background: var(--surface2); border-left: 2px solid var(--accent); }
+    .lb-row.alert-row { border-left: 2px solid var(--accent2); }
+    .lb-rank {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+    .lb-info { overflow: hidden; }
+    .lb-title {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text);
+    }
+    .lb-meta {
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lb-bsr {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+    .lb-score-col { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    .score-bar-wrap { width: 40px; height: 4px; background: var(--border); border-radius: 2px; }
+    .score-bar { height: 4px; border-radius: 2px; background: var(--accent); }
+    .score-bar.high { background: var(--accent); }
+    .score-bar.alert { background: var(--accent2); }
+    .score-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 28px;
+      text-align: right;
+    }
+    .score-num.alert { color: var(--accent2); }
+
+    /* ── Detail panel ── */
+    .detail-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60%;
+      color: var(--muted);
+      gap: 10px;
+    }
+    .detail-empty .icon { font-size: 40px; opacity: 0.3; }
+    .detail-empty p { font-size: 12px; font-family: var(--mono); }
+
+    .book-header { margin-bottom: 20px; }
+    .book-title-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+    .book-title { font-size: 20px; font-weight: 700; line-height: 1.2; flex: 1; }
+    .alert-chip {
+      background: var(--accent2);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: var(--mono);
+      white-space: nowrap;
+      margin-top: 3px;
+    }
+    .book-author { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+    .book-meta-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .chip.ku { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Metrics grid ── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .metric-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .metric-value { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--text); }
+    .metric-value.accent { color: var(--accent); }
+    .metric-value.warn { color: var(--warn); }
+    .metric-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Score breakdown ── */
+    .section-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .components-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+    .comp-row { display: flex; align-items: center; gap: 8px; }
+    .comp-name { font-size: 10px; color: var(--muted); width: 140px; flex-shrink: 0; }
+    .comp-bar-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 2px; }
+    .comp-bar { height: 3px; border-radius: 2px; background: var(--accent); }
+    .comp-val { font-family: var(--mono); font-size: 10px; color: var(--text); min-width: 28px; text-align: right; }
+
+    /* ── Explanation ── */
+    .explanation {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .explanation.alert-exp { border-left-color: var(--accent2); }
+
+    /* ── Social signals ── */
+    .social-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+    .social-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+
+    /* ── Chart area ── */
+    .chart-section { margin-bottom: 20px; }
+    canvas { width: 100% !important; }
+
+    /* ── Loading ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-row { padding: 20px; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* ── Links ── */
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">◆ PROJECT CINDERELLA <span>/ BREAKOUT MONITOR</span></div>
+  <div class="stat-pills" id="stat-pills">
+    <div class="pill"><span class="label">TRACKED</span><span class="value" id="stat-tracked">—</span></div>
+    <div class="pill"><span class="label">SCORED TODAY</span><span class="value" id="stat-scored">—</span></div>
+    <div class="pill"><span class="label">ALERTS</span><span class="value alert-val" id="stat-alerts">—</span></div>
+    <div class="pill"><span class="label">LAST COLLECTION</span><span class="value" id="stat-collected">—</span></div>
+  </div>
+  <button class="refresh-btn" onclick="refresh()">↺ REFRESH</button>
+</header>
+
+<!-- Main layout -->
+<div class="main">
+
+  <!-- Leaderboard -->
+  <div class="leaderboard-panel">
+    <div class="panel-header">
+      <span class="panel-title">MOMENTUM LEADERBOARD</span>
+      <span class="badge" id="lb-count">—</span>
+    </div>
+    <div class="leaderboard-scroll" id="lb-scroll">
+      <div class="loading-row"><span class="spinner"></span> Loading…</div>
+    </div>
+  </div>
+
+  <!-- Detail -->
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-empty">
+      <div class="icon">◈</div>
+      <p>Select a book from the leaderboard</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let selectedAsin = null;
+let leaderboardData = [];
+
+// ── Fetch helpers ──────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+function fmt(n) {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+function fmtScore(s) { return s != null ? s.toFixed(1) : '—'; }
+function fmtDate(d) { return d ? d.substring(0, 10) : '—'; }
+
+// ── Load stats ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const s = await apiFetch('/api/stats');
+    document.getElementById('stat-tracked').textContent = s.total_books_tracked;
+    document.getElementById('stat-scored').textContent = s.books_with_scores_today;
+    document.getElementById('stat-alerts').textContent = s.alerts_today;
+    document.getElementById('stat-collected').textContent = fmtDate(s.last_collection_date);
+  } catch(e) { console.warn('stats error', e); }
+}
+
+// ── Load leaderboard ───────────────────────────────────────────────────────
+async function loadLeaderboard() {
+  const container = document.getElementById('lb-scroll');
+  try {
+    const data = await apiFetch('/api/leaderboard?limit=50');
+    leaderboardData = data.entries || [];
+    document.getElementById('lb-count').textContent = leaderboardData.length;
+    renderLeaderboard(leaderboardData, container);
+  } catch(e) {
+    container.innerHTML = `<div class="loading-row" style="color:#ef4444">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderLeaderboard(entries, container) {
+  if (!entries.length) {
+    container.innerHTML = '<div class="loading-row">No scored books yet. Run the report script to generate scores.</div>';
+    return;
+  }
+  container.innerHTML = entries.map(e => {
+    const isAlert = e.alert_triggered;
+    const scoreClass = isAlert ? 'alert' : (e.momentum_score >= 60 ? 'high' : '');
+    const barW = Math.round(e.momentum_score);
+    const bsr = e.amazon_best_seller_rank ? '#' + fmt(e.amazon_best_seller_rank) : '—';
+    return `<div class="lb-row ${isAlert ? 'alert-row' : ''}" data-asin="${e.asin}" onclick="selectBook('${e.asin}')">
+      <div class="lb-rank">${e.rank}</div>
+      <div class="lb-info">
+        <div class="lb-title">${e.title}</div>
+        <div class="lb-meta">${e.author || '—'} · ${e.genre || '—'}</div>
+      </div>
+      <div class="lb-bsr">${bsr}</div>
+      <div class="lb-score-col">
+        <div class="score-bar-wrap"><div class="score-bar ${scoreClass}" style="width:${barW}%"></div></div>
+        <div class="score-num ${scoreClass}">${fmtScore(e.momentum_score)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Select book ────────────────────────────────────────────────────────────
+async function selectBook(asin) {
+  selectedAsin = asin;
+  document.querySelectorAll('.lb-row').forEach(r => r.classList.remove('selected'));
+  const row = document.querySelector(`[data-asin="${asin}"]`);
+  if (row) row.classList.add('selected');
+
+  const panel = document.getElementById('detail-panel');
+  panel.innerHTML = '<div style="padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px"><span class="spinner"></span> Loading…</div>';
+
+  try {
+    const [book, social] = await Promise.all([
+      apiFetch(`/api/books/${asin}`),
+      (async () => {
+        const lb = leaderboardData.find(e => e.asin === asin);
+        return lb ? apiFetch(`/api/social/${lb.book_id}`) : null;
+      })()
+    ]);
+    renderDetail(panel, book, social);
+  } catch(e) {
+    panel.innerHTML = `<div style="padding:20px;color:#ef4444">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Render detail ──────────────────────────────────────────────────────────
+function renderDetail(panel, book, social) {
+  const m = book.latest_metrics || {};
+  const latestScore = book.score_history.length ? book.score_history[book.score_history.length - 1] : null;
+  const components = latestScore?.components || {};
+  const isAlert = latestScore?.alert_triggered;
+
+  const compNames = {
+    rank_velocity: 'Rank Velocity',
+    rank_acceleration: 'Rank Accel.',
+    review_velocity: 'Review Velocity',
+    review_acceleration: 'Review Accel.',
+    rating_stability: 'Rating Stability',
+    sales_growth: 'Sales Growth',
+    age_factor: 'Age Factor',
+    kindle_unlimited: 'Kindle Unlimited',
+    booktok_velocity: 'BookTok',
+    reddit_buzz: 'Reddit Buzz',
+    goodreads_want_to_read: 'GR Want-to-Read',
+  };
+
+  const compHtml = Object.entries(compNames).map(([k, label]) => {
+    const v = components[k] ?? 0;
+    return `<div class="comp-row">
+      <div class="comp-name">${label}</div>
+      <div class="comp-bar-wrap"><div class="comp-bar" style="width:${v}%"></div></div>
+      <div class="comp-val">${v.toFixed(0)}</div>
+    </div>`;
+  }).join('');
+
+  const kuChip = book.kindle_unlimited ? '<span class="chip ku">KU</span>' : '';
+  const alertChip = isAlert ? '<span class="alert-chip">🔥 ALERT</span>' : '';
+  const grLink = book.goodreads_url ? `<a href="${book.goodreads_url}" target="_blank" class="chip">Goodreads ↗</a>` : '';
+  const amzLink = `<a href="https://amazon.com/dp/${book.asin}" target="_blank" class="chip">Amazon ↗</a>`;
+
+  const socialHtml = social ? `
+    <div class="section-title">Social Signals (7d)</div>
+    <div class="social-grid">
+      <div class="social-card">
+        <div class="metric-label">TikTok Mentions</div>
+        <div class="metric-value accent">${social.booktok_mentions}</div>
+        <div class="metric-sub">${fmt(social.booktok_total_views)} total views</div>
+      </div>
+      <div class="social-card">
+        <div class="metric-label">Reddit Posts</div>
+        <div class="metric-value accent">${social.reddit_posts}</div>
+        <div class="metric-sub">${fmt(social.reddit_total_upvotes)} upvotes</div>
+      </div>
+      <div class="social-card">
+        <div class="metric-label">GR Want-to-Read</div>
+        <div class="metric-value ${(social.goodreads_want_to_read||0) > 1000 ? 'warn' : 'accent'}">${fmt(social.goodreads_want_to_read)}</div>
+        <div class="metric-sub">leading indicator</div>
+      </div>
+    </div>` : '';
+
+  const explHtml = latestScore?.explanation
+    ? `<div class="explanation ${isAlert ? 'alert-exp' : ''}">${latestScore.explanation}</div>`
+    : '';
+
+  // Mini sparkline using canvas
+  const sparkPoints = book.score_history.map(s => s.momentum_score);
+
+  panel.innerHTML = `
+    <div class="book-header">
+      <div class="book-title-row">
+        <div class="book-title">${book.title}</div>
+        ${alertChip}
+      </div>
+      <div class="book-author">${book.author || ''} ${book.publisher ? '· ' + book.publisher : ''}</div>
+      <div class="book-meta-chips">
+        ${kuChip}
+        <span class="chip">${book.genre || 'Unknown Genre'}</span>
+        <span class="chip">ASIN: ${book.asin}</span>
+        <span class="chip">First seen ${fmtDate(book.first_seen)}</span>
+        ${amzLink}
+        ${grLink}
+      </div>
+    </div>
+
+    <div class="section-title">Latest Metrics</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Momentum Score</div>
+        <div class="metric-value accent">${fmtScore(latestScore?.momentum_score)}</div>
+        <div class="metric-sub">out of 100</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Amazon BSR</div>
+        <div class="metric-value">${m.amazon_best_seller_rank ? '#' + m.amazon_best_seller_rank.toLocaleString() : '—'}</div>
+        <div class="metric-sub">best seller rank</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Est. Daily Sales</div>
+        <div class="metric-value">${fmt(m.estimated_daily_sales)}</div>
+        <div class="metric-sub">copies/day</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Reviews</div>
+        <div class="metric-value">${fmt(m.review_count)}</div>
+        <div class="metric-sub">${m.star_rating ? m.star_rating.toFixed(1) + '★' : '—'}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">GR Rating</div>
+        <div class="metric-value">${m.goodreads_rating ? m.goodreads_rating.toFixed(2) + '★' : '—'}</div>
+        <div class="metric-sub">${fmt(m.goodreads_reviews)} ratings</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Want-to-Read</div>
+        <div class="metric-value ${(m.goodreads_want_to_read||0) > 500 ? 'warn' : ''}">${fmt(m.goodreads_want_to_read)}</div>
+        <div class="metric-sub">Goodreads shelf</div>
+      </div>
+    </div>
+
+    ${explHtml}
+
+    ${sparkPoints.length > 1 ? `
+    <div class="section-title">30-Day Score Trend</div>
+    <div class="chart-section">
+      <canvas id="spark-canvas" height="80"></canvas>
+    </div>` : ''}
+
+    <div class="section-title">Score Components</div>
+    <div class="components-grid">${compHtml}</div>
+
+    ${socialHtml}
+  `;
+
+  // Draw sparkline
+  if (sparkPoints.length > 1) {
+    drawSparkline('spark-canvas', sparkPoints, isAlert);
+  }
+}
+
+// ── Canvas sparkline ───────────────────────────────────────────────────────
+function drawSparkline(canvasId, points, isAlert) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth || 600;
+  const h = 80;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = { top: 8, right: 12, bottom: 20, left: 36 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+  const min = Math.max(0, Math.min(...points) - 5);
+  const max = Math.min(100, Math.max(...points) + 5);
+  const range = max - min || 1;
+
+  const xs = i => pad.left + (i / (points.length - 1)) * cw;
+  const ys = v => pad.top + ch - ((v - min) / range) * ch;
+
+  // Y axis labels
+  ctx.fillStyle = '#64748b';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  [min, (min + max) / 2, max].forEach(v => {
+    ctx.fillText(v.toFixed(0), pad.left - 4, ys(v) + 3);
+  });
+
+  // Grid lines
+  ctx.strokeStyle = '#232830';
+  ctx.lineWidth = 1;
+  [min, (min + max) / 2, max].forEach(v => {
+    ctx.beginPath();
+    ctx.moveTo(pad.left, ys(v));
+    ctx.lineTo(pad.left + cw, ys(v));
+    ctx.stroke();
+  });
+
+  // X labels (dates)
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  ctx.font = '9px monospace';
+  if (points.length > 1) {
+    ctx.fillText('30d ago', xs(0), h - 4);
+    ctx.fillText('today', xs(points.length - 1), h - 4);
+  }
+
+  // Area fill
+  const color = isAlert ? '#ff6b35' : '#00d4aa';
+  ctx.beginPath();
+  ctx.moveTo(xs(0), ys(points[0]));
+  points.forEach((v, i) => ctx.lineTo(xs(i), ys(v)));
+  ctx.lineTo(xs(points.length - 1), h - pad.bottom);
+  ctx.lineTo(xs(0), h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = isAlert ? 'rgba(255,107,53,0.08)' : 'rgba(0,212,170,0.08)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(xs(0), ys(points[0]));
+  points.forEach((v, i) => ctx.lineTo(xs(i), ys(v)));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Dots
+  points.forEach((v, i) => {
+    ctx.beginPath();
+    ctx.arc(xs(i), ys(v), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+}
+
+// ── Init & refresh ─────────────────────────────────────────────────────────
+async function refresh() {
+  await Promise.all([loadStats(), loadLeaderboard()]);
+  if (selectedAsin) selectBook(selectedAsin);
+}
+
+refresh();
+</script>
+
+</body>
+</html>
