@@ -81,18 +81,31 @@ class AmazonParser:
         Returns a list of :class:`BestsellerEntry` dicts, one per book,
         ordered by rank (1 = #1 bestseller).
 
-        Amazon renders two versions of this page (A/B test variants).
-        We handle both: the ``zg-item-immersion`` grid and the older
-        ``zg_item`` list format.
+        Handles Amazon's 2026 page structure: book cards are
+        ``div[data-asin]`` elements whose class contains ``iveVideoWrapper``.
+        Falls back to the older ``li.zg-item-immersion`` format, then to
+        walking up from rank badges as a last resort.
         """
         soup = BeautifulSoup(html, "html.parser")
         entries: list[BestsellerEntry] = []
 
-        # Primary: new-style grid (2022+)
-        items = soup.select("div[data-asin][data-index]")
+        # Primary: 2026 card style — div[data-asin] with iveVideoWrapper class
+        items = soup.select('div[data-asin][class*="iveVideoWrapper"]')
+
         if not items:
             # Fallback: older list format
             items = soup.select("li.zg-item-immersion")
+
+        if not items:
+            # Last resort: walk up from rank badges to find data-asin ancestor
+            seen: set[str] = set()
+            for badge in soup.select("span.zg-bdg-text"):
+                ancestor = badge.find_parent("div", attrs={"data-asin": True})
+                if ancestor:
+                    asin = ancestor.get("data-asin", "")
+                    if asin and asin not in seen:
+                        seen.add(asin)
+                        items.append(ancestor)
 
         for item in items:
             try:
@@ -114,7 +127,6 @@ class AmazonParser:
         # ASIN
         asin = item.get("data-asin") or ""
         if not asin:
-            # Try inner link href
             link = item.select_one("a[href*='/dp/']")
             if link:
                 m = re.search(r"/dp/([A-Z0-9]{10})", link["href"])
@@ -122,37 +134,38 @@ class AmazonParser:
         if not asin:
             return None
 
-        # Rank
-        rank_el = item.select_one(".zg-bdg-text, span.zg-bdg-text, .p13n-sc-uncoverable-faceout span")
+        # Rank — stable class zg-bdg-text
+        rank_el = item.select_one("span.zg-bdg-text")
         rank_text = rank_el.get_text(strip=True) if rank_el else ""
         rank = AmazonParser._parse_int(re.sub(r"[^0-9]", "", rank_text)) or 999
 
-        # Title
-        title_el = item.select_one("._cDEzb_p13n-sc-css-line-clamp-3_g3dy1, .p13n-sc-truncated, a.a-link-normal span")
-        title = title_el.get_text(strip=True) if title_el else "Unknown Title"
-
-        # Author
-        author_el = item.select_one(".a-size-small.a-color-secondary, .a-row.a-size-small span")
-        author = author_el.get_text(strip=True) if author_el else "Unknown Author"
+        # Title and Author — both use the p13n-sc-css-line-clamp class (first=title, second=author)
+        line_clamps = item.select('[class*="p13n-sc-css-line-clamp"]')
+        title = line_clamps[0].get_text(strip=True) if len(line_clamps) > 0 else "Unknown Title"
+        author = line_clamps[1].get_text(strip=True) if len(line_clamps) > 1 else "Unknown Author"
         author = re.sub(r"^by\s+", "", author, flags=re.IGNORECASE).strip()
 
-        # Price
-        price_el = item.select_one(".p13n-sc-price, .a-price .a-offscreen")
-        price = AmazonParser._parse_price(price_el.get_text(strip=True) if price_el else "")
-
         # Rating
-        rating_el = item.select_one("i.a-icon-star-small span.a-icon-alt, .a-icon-alt")
+        rating_el = item.select_one("span.a-icon-alt")
         star_rating = AmazonParser._parse_rating(rating_el.get_text(strip=True) if rating_el else "")
 
-        # Review count
-        review_el = item.select_one("span.a-size-small.a-color-tertiary")
-        review_count = None
-        if review_el:
-            review_count = AmazonParser._parse_int(re.sub(r"[^0-9]", "", review_el.get_text()))
+        # Review count — first span.a-size-small whose text is purely numeric
+        review_count: Optional[int] = None
+        for el in item.select("span.a-size-small"):
+            text = el.get_text(strip=True).replace(",", "")
+            if text.isdigit():
+                review_count = int(text)
+                break
+
+        # Price — span with p13n-sc-price in class name
+        price_el = item.select_one('[class*="p13n-sc-price"]')
+        price = AmazonParser._parse_price(price_el.get_text(strip=True) if price_el else "")
 
         # Cover image
-        img_el = item.select_one("img.p13n-product-image, img.s-image, img[data-a-image-name]")
-        cover_url = img_el.get("src") or img_el.get("data-src") if img_el else None
+        img_el = item.select_one("img")
+        cover_url: Optional[str] = None
+        if img_el:
+            cover_url = img_el.get("src") or img_el.get("data-src")
 
         return BestsellerEntry(
             rank=rank,

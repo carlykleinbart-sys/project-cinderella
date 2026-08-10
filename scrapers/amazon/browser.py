@@ -197,6 +197,8 @@ class AmazonBrowser:
         Fetch a page and simulate a human scrolling through it.
 
         Useful for bestseller list pages that lazy-load content.
+        Uses ``networkidle`` so JavaScript XHR calls finish before we
+        capture HTML, then scrolls to trigger any lazy-loaded images.
         """
         assert self._context is not None
 
@@ -204,14 +206,23 @@ class AmazonBrowser:
 
         page: Page = await self._context.new_page()
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            # networkidle waits until no network activity for 500ms —
+            # ensures Amazon's JS has fetched and rendered the book grid.
+            await page.goto(url, wait_until="networkidle", timeout=60_000)
+
+            # Extra buffer in case of staggered XHR calls
+            await asyncio.sleep(random.uniform(2.0, 3.5))
 
             # Scroll in three steps to trigger lazy loads
             for scroll_pct in (0.33, 0.66, 1.0):
                 await page.evaluate(
                     f"window.scrollTo(0, document.body.scrollHeight * {scroll_pct})"
                 )
-                await asyncio.sleep(random.uniform(0.5, 1.5))
+                await asyncio.sleep(random.uniform(0.8, 1.8))
+
+            # Scroll back to top (some pages only render rank badges when visible)
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1.0)
 
             html = await page.content()
             if self._is_bot_wall(html):
