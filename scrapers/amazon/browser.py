@@ -129,6 +129,21 @@ class AmazonBrowser:
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
 
+        # Warm up session: visit the Kindle Store homepage so Amazon sets
+        # the session cookies that the bestseller pages depend on.
+        warmup_page = await self._context.new_page()
+        try:
+            await warmup_page.goto(
+                "https://www.amazon.com/Kindle-eBooks/b?node=154606011",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            await asyncio.sleep(random.uniform(1.5, 3.0))
+        except Exception:
+            pass  # warmup failure is non-fatal
+        finally:
+            await warmup_page.close()
+
         logger.debug("Playwright browser started (headless={})", settings.amazon_headless)
 
     async def _stop(self) -> None:
