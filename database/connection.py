@@ -47,9 +47,7 @@ def _build_engine():
             max_overflow=5,
             pool_recycle=60,  # recycle connections every 60s to beat Railway's proxy timeout
             connect_args={
-                "connect_timeout": 10,
-                # TCP keepalives: send a probe every 30s, retry 5 times at 10s intervals
-                # This keeps the connection alive through Railway's NAT/proxy
+                # TCP keepalives keep the connection alive through Railway's NAT/proxy
                 "keepalives": 1,
                 "keepalives_idle": 30,
                 "keepalives_interval": 10,
