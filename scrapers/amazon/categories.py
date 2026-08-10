@@ -80,5 +80,5 @@ PRIORITY_CATEGORIES: list[str] = [
 # ---------------------------------------------------------------------------
 # Base URLs
 # ---------------------------------------------------------------------------
-BESTSELLER_BASE_URL = "https://www.amazon.com/gp/bestsellers/digital-text/{node_id}/"
+BESTSELLER_BASE_URL = "https://www.amazon.com/Best-Sellers-Kindle-Store/zgbs/digital-text/{node_id}"
 BOOK_BASE_URL = "https://www.amazon.com/dp/{asin}/"
