@@ -206,12 +206,20 @@ class AmazonBrowser:
 
         page: Page = await self._context.new_page()
         try:
-            # networkidle waits until no network activity for 500ms —
-            # ensures Amazon's JS has fetched and rendered the book grid.
-            await page.goto(url, wait_until="networkidle", timeout=60_000)
+            # Use "load" (all resources) rather than "networkidle" —
+            # Amazon has persistent background XHR that prevents networkidle
+            # from ever settling within the timeout window.
+            await page.goto(url, wait_until="load", timeout=45_000)
 
-            # Extra buffer in case of staggered XHR calls
-            await asyncio.sleep(random.uniform(2.0, 3.5))
+            # Wait specifically for the rank badge that proves books are rendered.
+            # Times out after 15s if the grid never appears (bot wall, error page, etc.)
+            try:
+                await page.wait_for_selector("span.zg-bdg-text", timeout=15_000)
+            except Exception:
+                logger.warning("Rank badges not found after load; capturing anyway")
+
+            # Small buffer for any trailing XHR
+            await asyncio.sleep(random.uniform(1.5, 2.5))
 
             # Scroll in three steps to trigger lazy loads
             for scroll_pct in (0.33, 0.66, 1.0):
