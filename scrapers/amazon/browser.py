@@ -211,15 +211,32 @@ class AmazonBrowser:
             # from ever settling within the timeout window.
             await page.goto(url, wait_until="load", timeout=60_000)
 
-            # Wait specifically for the rank badge that proves books are rendered.
-            # Times out after 30s if the grid never appears (bot wall, error page, etc.)
-            try:
-                await page.wait_for_selector("span.zg-bdg-text", timeout=30_000)
-            except Exception:
-                logger.warning("Rank badges not found after load; capturing anyway")
+            # Wait until the page has rendered at least 10 rank badges — this
+            # rules out CSS-only occurrences and confirms the book grid loaded.
+            # Some categories need a scroll trigger first, so we interleave
+            # scroll attempts with the wait.
+            grid_loaded = False
+            for attempt in range(4):
+                try:
+                    await page.wait_for_function(
+                        "document.querySelectorAll('span.zg-bdg-text').length >= 10",
+                        timeout=8_000,
+                    )
+                    grid_loaded = True
+                    break
+                except Exception:
+                    # Trigger a scroll to wake lazy-load, then retry
+                    scroll_pct = (attempt + 1) * 0.25
+                    await page.evaluate(
+                        f"window.scrollTo(0, document.body.scrollHeight * {scroll_pct})"
+                    )
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
+
+            if not grid_loaded:
+                logger.warning("Book grid did not render for {}; capturing anyway", url)
 
             # Small buffer for any trailing XHR
-            await asyncio.sleep(random.uniform(1.5, 2.5))
+            await asyncio.sleep(random.uniform(1.0, 2.0))
 
             # Scroll in three steps to trigger lazy loads
             for scroll_pct in (0.33, 0.66, 1.0):
