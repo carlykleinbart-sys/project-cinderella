@@ -65,7 +65,9 @@ class Book(Base):
     publisher: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     publication_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     format: Mapped[BookFormat] = mapped_column(
-        Enum(BookFormat, native_enum=False), default=BookFormat.UNKNOWN, nullable=False
+        Enum(BookFormat, native_enum=False, values_callable=lambda obj: [e.value for e in obj]),
+        default=BookFormat.UNKNOWN,
+        nullable=False,
     )
     kindle_unlimited: Mapped[bool] = mapped_column(
         Boolean,
