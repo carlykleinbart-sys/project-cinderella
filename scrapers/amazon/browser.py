@@ -209,12 +209,12 @@ class AmazonBrowser:
             # Use "load" (all resources) rather than "networkidle" —
             # Amazon has persistent background XHR that prevents networkidle
             # from ever settling within the timeout window.
-            await page.goto(url, wait_until="load", timeout=45_000)
+            await page.goto(url, wait_until="load", timeout=60_000)
 
             # Wait specifically for the rank badge that proves books are rendered.
-            # Times out after 15s if the grid never appears (bot wall, error page, etc.)
+            # Times out after 30s if the grid never appears (bot wall, error page, etc.)
             try:
-                await page.wait_for_selector("span.zg-bdg-text", timeout=15_000)
+                await page.wait_for_selector("span.zg-bdg-text", timeout=30_000)
             except Exception:
                 logger.warning("Rank badges not found after load; capturing anyway")
 
